@@ -3,7 +3,7 @@ using UnityEngine;
 using Il2CppScheduleOne.Trash;
 using HarmonyLib;
 
-[assembly: MelonInfo(typeof(TrashGrabPlus.Core), "TrashDestroyer", "1.0.0", "heimy", null)]
+[assembly: MelonInfo(typeof(TrashGrabPlus.Core), "TrashDestroyer", "1.1.0", "heimy", null)]
 [assembly: MelonGame("TVGS", "Schedule I")]
 
 namespace TrashGrabPlus
@@ -28,6 +28,11 @@ namespace TrashGrabPlus
             {
                 UseTrashGrabber();
             }
+
+            if (Input.GetKeyDown(KeyCode.LeftBracket)) // '[' key
+            {
+                UseTrashGrabberNearPlayer();
+            }
         }
 
         private void UseTrashGrabber()
@@ -38,35 +43,58 @@ namespace TrashGrabPlus
             Vector3 housePosition = new Vector3(-172.1976f, -2.735f, 114.9906f);
             float radius = 20.0f;
 
-            LoggerInstance.Msg($"Checking for trash items within radius: {radius}");
 
-            CheckAndPickUpTrashItems(barnPosition, radius);
-            CheckAndPickUpTrashItems(docksPosition, radius);
-            CheckAndPickUpTrashItems(sweatshopPosition, radius);
-            CheckAndPickUpTrashItems(housePosition, radius);
+            int barnCount = CheckAndPickUpTrashItems(barnPosition, radius);
+            LoggerInstance.Msg($"Deleted {barnCount} trash items at the barn.");
+
+            int docksCount = CheckAndPickUpTrashItems(docksPosition, radius);
+            LoggerInstance.Msg($"Deleted {docksCount} trash items at the docks.");
+
+            int sweatshopCount = CheckAndPickUpTrashItems(sweatshopPosition, radius);
+            LoggerInstance.Msg($"Deleted {sweatshopCount} trash items at the sweatshop.");
+
+            int houseCount = CheckAndPickUpTrashItems(housePosition, radius);
+            LoggerInstance.Msg($"Deleted {houseCount} trash items at the house.");
         }
 
-        private void CheckAndPickUpTrashItems(Vector3 position, float radius)
+        private void UseTrashGrabberNearPlayer()
         {
-            LoggerInstance.Msg($"Checking position: {position}");
+            GameObject player = GameObject.Find("Player_Local");
+            if (player == null)
+            {
+                LoggerInstance.Msg("Player_Local GameObject not found.");
+                return;
+            }
+
+            Vector3 playerPosition = player.transform.position;
+            float radius = 10.0f;
+
+            int playerCount = CheckAndPickUpTrashItems(playerPosition, radius);
+            LoggerInstance.Msg($"Deleted {playerCount} trash items near the player.");
+        }
+
+        private int CheckAndPickUpTrashItems(Vector3 position, float radius)
+        {
 
             TrashItem[] allTrashItems = GameObject.FindObjectsOfType<TrashItem>();
+            int count = 0;
             foreach (var trashItem in allTrashItems)
             {
                 float distance = Vector3.Distance(position, trashItem.transform.position);
                 if (distance <= radius)
                 {
-                    LoggerInstance.Msg($"Found trash item: {trashItem.name} at distance: {distance}");
                     PickUpTrashItem(trashItem);
+                    count++;
                 }
             }
+            return count;
         }
 
         private void PickUpTrashItem(TrashItem trashItem)
         {
-            LoggerInstance.Msg($"Picked up: {trashItem.name}");
             GameObject.Destroy(trashItem.gameObject);
         }
     }
 }
+
 
