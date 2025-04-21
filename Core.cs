@@ -4,10 +4,14 @@ using System.Collections.Generic;
 using HarmonyLib;
 using Il2CppScheduleOne.Money;
 using Il2CppScheduleOne.Trash;
+using Il2CppScheduleOne.UI;
 using MelonLoader;
 using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.Events;
+using Il2CppTMPro;
 
-[assembly: MelonInfo(typeof(TrashGrabPlus.Core), "TrashDestroyer", "1.2.0", "heimy", null)]
+[assembly: MelonInfo(typeof(TrashGrabPlus.Core), "TrashDestroyer", "2.0.0", "heimy", null)]
 [assembly: MelonGame("TVGS", "Schedule I")]
 
 namespace TrashGrabPlus
@@ -15,63 +19,70 @@ namespace TrashGrabPlus
     [HarmonyPatch(typeof(TrashItem))]
     [HarmonyPatch("AddTrash")]
     [HarmonyPatch(new Type[]
-                        {
-                        typeof(TrashItem),
-                    })]
-
+                                {
+                                typeof(TrashItem),
+                            })]
     public class Core : MelonMod
     {
         private Dictionary<string, string> trashTypeMap = new Dictionary<string, string>
-                        {
-                            { "waterbottle", "plastic" },
-                            { "cigarette", "others" },
-                            { "energydrink", "metal" },
-                            { "usedcigarette", "others" },
-                            { "cigarette_used", "others" },
-                            { "litter1", "others" },
-                            { "crushedcuke", "metal" },
-                            { "pipe", "glass" },
-                            { "cuke", "metal" },
-                            { "plantscrap", "others" },
-                            { "cigarettebox", "others" },
-                            { "motoroil", "metal" },
-                            { "motoroil_used", "metal" },
-                            { "bong", "glass" },
-                            { "syringe", "plastic" },
-                            { "addy", "plastic" },
-                            { "glassbottle", "glass" },
-                            { "coffeecup", "others" },
-                            { "m1911mag", "metal" },
-                            { "revolvercylinder", "metal" },
-                            { "chemicaljug", "plastic" },
-                            { "gasoline", "plastic" },
-                            { "fertilizer", "plastic" },
-                            { "pgr", "plastic" },
-                            { "speedgrow", "plastic" },
-                            { "seedvial", "plastic" },
-                            { "acid", "plastic" },
-                            { "soilbag", "others" },
-                            { "soilbag2", "others" },
-                            { "soilbag3", "others" },
-                            { "extralonglifesoil", "others" },
-                            { "longlifesoil", "others" },
-                            { "soil", "others" }
-                        };
+            {
+                { "waterbottle", "plastic" },
+                { "cigarette", "others" },
+                { "energydrink", "metal" },
+                { "usedcigarette", "others" },
+                { "cigarette_used", "others" },
+                { "litter1", "others" },
+                { "crushedcuke", "metal" },
+                { "pipe", "glass" },
+                { "cuke", "metal" },
+                { "plantscrap", "others" },
+                { "cigarettebox", "others" },
+                { "motoroil", "metal" },
+                { "motoroil_used", "metal" },
+                { "bong", "glass" },
+                { "syringe", "plastic" },
+                { "addy", "plastic" },
+                { "glassbottle", "glass" },
+                { "coffeecup", "others" },
+                { "m1911mag", "metal" },
+                { "revolvercylinder", "metal" },
+                { "chemicaljug", "plastic" },
+                { "gasoline", "plastic" },
+                { "fertilizer", "plastic" },
+                { "pgr", "plastic" },
+                { "speedgrow", "plastic" },
+                { "seedvial", "plastic" },
+                { "acid", "plastic" },
+                { "soilbag", "others" },
+                { "soilbag2", "others" },
+                { "soilbag3", "others" },
+                { "extralonglifesoil", "others" },
+                { "longlifesoil", "others" },
+                { "soil", "others" }
+            };
 
         private Dictionary<string, int> trashValueMap = new Dictionary<string, int>
-                        {
-                            { "glass", 30 },
-                            { "plastic", 2 },
-                            { "metal", 2 },
-                            { "others", 1 }
-                        };
+            {
+                { "glass", 30 },
+                { "plastic", 2 },
+                { "metal", 2 },
+                { "others", 1 }
+            };
 
         private GameObject _localPlayer;
         private MoneyManager _moneyManager;
 
+        private static GameObject trashDestroyerButton;
+        private static int trashDestroyerInterval = 5;
+        private static Coroutine trashDestroyerCoroutine;
+
+        public static Core Instance { get; private set; }
+
         public override void OnInitializeMelon()
         {
+            Instance = this;
             LoggerInstance.Msg("Initialized.");
+
         }
 
         public override void OnUpdate()
@@ -90,6 +101,7 @@ namespace TrashGrabPlus
         public override void OnSceneWasLoaded(int buildIndex, string sceneName)
         {
             MelonCoroutines.Start(WaitForMoneyManager());
+            CreateTrashDestroyerButton();
         }
 
         private IEnumerator WaitForMoneyManager()
@@ -121,7 +133,6 @@ namespace TrashGrabPlus
 
             int barnCount = CheckAndPickUpTrashItems(barnPosition, radius, ref totalCashAdded);
             LoggerInstance.Msg($"Deleted {barnCount} trash items at the barn.");
-
             int docksCount = CheckAndPickUpTrashItems(docksPosition, radius, ref totalCashAdded);
             LoggerInstance.Msg($"Deleted {docksCount} trash items at the docks.");
 
@@ -192,7 +203,6 @@ namespace TrashGrabPlus
 
             if (trashTypeMap.TryGetValue(trashID, out string trashType))
             {
-
                 if (trashValueMap.TryGetValue(trashType, out int value))
                 {
                     AddCashToPlayer(value);
@@ -214,6 +224,128 @@ namespace TrashGrabPlus
                 LoggerInstance.Msg("MoneyManager component not found.");
             }
         }
+
+        private static string GetTrashDestroyerText()
+        {
+            return $"TrashDestroyer: {trashDestroyerInterval} Minutes";
+        }
+        private static void StaticOnTrashDestroyerButtonClick()
+        {
+            if (Instance != null)
+            {
+
+                Button buttonComponent = trashDestroyerButton.GetComponent<Button>();
+                if (buttonComponent == null)
+                {
+                    MelonLogger.Error("Button component not found on TrashDestroyer button.");
+                    return;
+                }
+                Instance.OnTrashDestroyerButtonClick();
+            }
+        }
+
+        private static void CreateTrashDestroyerButton()
+        {
+            try
+            {
+                PauseMenu pauseMenu = GameObject.FindObjectOfType<PauseMenu>();
+                if (pauseMenu == null) return;
+
+                Transform container = pauseMenu.transform.Find("Container/Container/Bank");
+                if (container == null) return;
+
+                Transform quitButton = container.Find("Quit");
+                if (quitButton == null) return;
+
+                Transform existingButton = container.Find("TrashDestroyer");
+                if (existingButton != null)
+                {
+                    GameObject.Destroy(existingButton.gameObject);
+                }
+
+                trashDestroyerButton = GameObject.Instantiate(quitButton.gameObject, container);
+                trashDestroyerButton.name = "TrashDestroyer";
+
+                Instance.buttonTexts = trashDestroyerButton.GetComponentsInChildren<TextMeshProUGUI>(true);
+                foreach (TextMeshProUGUI text in Instance.buttonTexts)
+                {
+                    text.text = GetTrashDestroyerText();
+                }
+
+                Button buttonComponent = trashDestroyerButton.GetComponent<Button>();
+                if (buttonComponent == null)
+                {
+                    MelonLogger.Error("Button component not found on TrashDestroyer button.");
+                    return;
+                }
+
+                buttonComponent.onClick = new Button.ButtonClickedEvent();
+
+                buttonComponent.onClick.AddListener((UnityAction)(() =>
+                {
+                    StaticOnTrashDestroyerButtonClick();
+                }));
+
+                RectTransform rectTransform = trashDestroyerButton.GetComponent<RectTransform>();
+                rectTransform.anchoredPosition = new Vector2(rectTransform.anchoredPosition.x, 250f);
+
+
+                trashDestroyerButton.transform.localScale = new Vector3(0.9f, 0.9f, 0.9f);
+                trashDestroyerButton.SetActive(true);
+
+                StartTrashDestroyer();
+            }
+            catch (Exception ex)
+            {
+                MelonLogger.Error($"Error adding TrashDestroyer button: {ex}");
+            }
+        }
+
+
+        private void OnTrashDestroyerButtonClick()
+        {
+            UpdateTrashDestroyerInterval();
+            foreach (TextMeshProUGUI text in buttonTexts)
+            {
+                text.text = GetTrashDestroyerText();
+            }
+        }
+
+        private TextMeshProUGUI[] buttonTexts;
+
+
+
+        private static void UpdateTrashDestroyerInterval()
+        {
+            int[] intervals = { 1, 5, 10, 15 }; // Intervals in minutes
+            int currentIndex = Array.IndexOf(intervals, trashDestroyerInterval);
+            trashDestroyerInterval = intervals[(currentIndex + 1) % intervals.Length];
+
+            StartTrashDestroyer();
+        }
+
+        private static void StartTrashDestroyer()
+        {
+            if (trashDestroyerCoroutine != null)
+            {
+                MelonCoroutines.Stop(trashDestroyerCoroutine);
+            }
+
+            trashDestroyerCoroutine = MelonCoroutines.Start(TrashDestroyerRoutine()) as Coroutine;
+        }
+
+        private static IEnumerator TrashDestroyerRoutine()
+        {
+            while (true)
+            {
+                yield return new WaitForSeconds(trashDestroyerInterval * 60);
+                if (Instance != null)
+                {
+                    Instance.UseTrashGrabber();
+                }
+            }
+        }
+
+
     }
 }
-
